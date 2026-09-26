@@ -16,6 +16,13 @@ its message on disk.
   finds it pointing elsewhere. A build that is not under an Applications
   folder never writes a login item.
 
+### Agent settings
+
+- **Daily schedule controls now persist their changes.** The schedule
+  checkbox and time field capture their values before the asynchronous
+  settings save, so a controlled re-render cannot restore the old value
+  before it is written.
+
 ### Diagnostics
 
 - **`panic.log`** in the app's data folder. A panic during startup runs

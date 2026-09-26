@@ -258,24 +258,26 @@ export function AgentTab() {
           type="checkbox"
           checked={settings.schedule_hhmm !== null}
           disabled={!connected}
-          onChange={(event) =>
+          onChange={(event) => {
+            const checked = event.currentTarget.checked;
             void save((next) => ({
               ...next,
-              schedule_hhmm: event.target.checked ? "06:00" : null,
-            }))
-          }
+              schedule_hhmm: checked ? "06:00" : null,
+            }));
+          }}
         />
         Process each day at
         <input
           type="time"
           value={settings.schedule_hhmm ?? "06:00"}
           disabled={!connected || settings.schedule_hhmm === null}
-          onChange={(event) =>
+          onChange={(event) => {
+            const value = event.currentTarget.value;
             void save((next) => ({
               ...next,
-              schedule_hhmm: event.target.value || null,
-            }))
-          }
+              schedule_hhmm: value || null,
+            }));
+          }}
         />
       </label>
       <p className="settings-note">
