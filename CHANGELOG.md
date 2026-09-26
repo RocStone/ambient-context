@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.3
+
+Fixes daily schedule settings reverting instead of saving.
+
+### Agent settings
+
+- **Daily schedule controls now persist their changes.** The schedule
+  checkbox and time field capture their values before the asynchronous
+  settings save, so a controlled re-render cannot restore the old value
+  before it is written.
+
 ## 1.1.2
 
 The login item follows the installed app, and a crash at launch leaves
@@ -15,13 +26,6 @@ its message on disk.
   program the login item names and rewrites it when an installed app
   finds it pointing elsewhere. A build that is not under an Applications
   folder never writes a login item.
-
-### Agent settings
-
-- **Daily schedule controls now persist their changes.** The schedule
-  checkbox and time field capture their values before the asynchronous
-  settings save, so a controlled re-render cannot restore the old value
-  before it is written.
 
 ### Diagnostics
 
