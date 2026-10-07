@@ -9,6 +9,15 @@
   draws authentication and keychain dialogs) join the built-in excluded
   applications, so their windows are dropped before anything is written.
 
+### Capture
+
+- **Chinese and Japanese lines are no longer dropped as UI labels.** The
+  short-fragment filter counted whitespace-separated words, and text
+  written without spaces between words is one token however long it is,
+  so nearly every Chinese or Japanese sentence was discarded. A line with
+  at least six Han ideographs or kana is now kept; shorter ones such as
+  「保存」 or 「打开文件」 are still dropped like their English equivalents.
+
 ## 1.1.3
 
 Fixes daily schedule settings reverting instead of saving.
