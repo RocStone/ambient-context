@@ -1884,7 +1884,10 @@ pub fn run() {
             app.manage(PendingOpenDay::default());
             app.manage(update::UpdateState::default());
             jobs::start(app.handle().clone());
-            update::start(app.handle().clone());
+            // roc/local fork build: no background update check, so the
+            // official release is never offered in place of this build.
+            // "Check for Updates" in the tray still works on request.
+            // update::start(app.handle().clone());
             // The control socket, for the mcp subcommand. A failure to bind is
             // reported to stderr and nothing else: an app that will not start
             // because an MCP socket is busy is worse than an app with no MCP.
