@@ -10,6 +10,12 @@
   so nearly every Chinese or Japanese sentence was discarded. A line with
   at least six Han ideographs or kana is now kept; shorter ones such as
   「保存」 or 「打开文件」 are still dropped like their English equivalents.
+### Privacy
+
+- **Apple Passwords and the system password prompt are never read.**
+  `Passwords` (the macOS 15 app) and `SecurityAgent` (the process that
+  draws authentication and keychain dialogs) join the built-in excluded
+  applications, so their windows are dropped before anything is written.
 
 ## 1.1.3
 
