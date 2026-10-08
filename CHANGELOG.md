@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Privacy
+
+- **Apple Passwords and the system password prompt are never read.**
+  `Passwords` (the macOS 15 app) and `SecurityAgent` (the process that
+  draws authentication and keychain dialogs) join the built-in excluded
+  applications, so their windows are dropped before anything is written.
+
 ## 1.1.3
 
 Fixes daily schedule settings reverting instead of saving.
