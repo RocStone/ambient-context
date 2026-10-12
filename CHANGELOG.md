@@ -1,5 +1,73 @@
 # Changelog
 
+## 1.1.4-roc.1
+
+Fork build on 1.1.4. Reads the content of a window rather than the first
+40 levels of it.
+
+### Capture
+
+- **Paseo chat is recorded.** The walk stopped at 40 levels of nesting,
+  and Paseo's transcript sits 54 to 62 levels down, so only its project
+  sidebar was ever read; once the day's dedup had seen the sidebar, most
+  Paseo blocks were empty. The walk is now bounded by nodes, text and time
+  instead of depth.
+- **Per-app extraction profiles.** An app's profile names where its
+  content lives and what to leave out. Paseo reads the transcript and the
+  composer; browsers read the page's main landmark or the page, never
+  the tab strip or toolbar. Adding one is described in the README.
+- **Window chrome is left out for every other app.** Menus, toolbars, tab
+  buttons, web navigation landmarks and sidebars (by their shape: a
+  narrow full-height column at an edge) are skipped unless they are all
+  there is.
+- **Long text areas keep their visible part.** A value of 8,000
+  characters or more, such as a terminal's scrollback, was dropped whole;
+  the part on screen is now read instead.
+
+### Updates
+
+- **No background update check.** This version sorts below the official
+  1.1.4, so the official release would be offered over it. Check for
+  Updates in the menu bar still works on request.
+
+## 1.1.4
+
+Keeps Chinese and Japanese text, never reads Apple Passwords, stops
+rejecting summaries over their frontmatter, and opens the main window
+when the app is opened again.
+
+### Capture
+
+- **Chinese and Japanese lines are no longer dropped as UI labels.** The
+  short-fragment filter counted whitespace-separated words, and text
+  written without spaces between words is one token however long it is,
+  so nearly every Chinese or Japanese sentence was discarded. A line with
+  at least six Han ideographs or kana is now kept; shorter ones such as
+  「保存」 or 「打开文件」 are still dropped like their English equivalents.
+
+### Privacy
+
+- **Apple Passwords and the system password prompt are never read.**
+  `Passwords` (the macOS 15 app) and `SecurityAgent` (the process that
+  draws authentication and keychain dialogs) join the built-in excluded
+  applications, so their windows are dropped before anything is written.
+
+### Summaries
+
+- **A day summary is no longer rejected over its frontmatter.** Models
+  sometimes left the frontmatter block unclosed, and the validator
+  discarded an otherwise good summary, which left the day pending for the
+  scheduled backfill. The app now writes the frontmatter itself (date,
+  type, the agent that generated it and the prompt's hash) and drops
+  whatever the model wrote there, closed or not.
+
+### Menu bar
+
+- **Opening the app again shows the main window.** Launching Ambient
+  Context from Finder, Spotlight or Launchpad while it is already running
+  opens the main window. On macOS 26 the menu bar icon can be hidden in
+  System Settings → Menu Bar, and this is the way back in when it is.
+
 ## 1.1.3
 
 Fixes daily schedule settings reverting instead of saving.

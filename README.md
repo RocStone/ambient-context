@@ -205,6 +205,62 @@ AGENTS.md
   app name and what you were doing in it. [docs/bug-reports.md](docs/bug-reports.md)
   says what to include and what to leave out.
 
+## What is read from a window
+
+The walk reads the focused window's whole accessibility tree, bounded by
+20,000 nodes, 6,000 text-carrying nodes, 300,000 characters and 1.5
+seconds rather than by depth: Electron and React Native web apps nest their content 50 to 70
+levels down. What counts as content is then decided in Rust
+(`src-tauri/src/reader/`):
+
+- **An extraction profile**, when the app has one
+  (`reader/profiles.rs`), names the regions that hold its content and the
+  order to read them in. Paseo's profile reads the chat transcript, then
+  the composer. The browser profile reads the page's main landmark, or
+  the whole page when it marks none, and never the tab strip or toolbar.
+- **The generic fallback**, for every other app and for a profile whose
+  regions are empty, reads everything except chrome: menu bars, menus,
+  toolbars, tab buttons, web navigation, header and footer landmarks, and
+  sidebars. A sidebar is recognised by its shape: a full-height column at
+  most a third of its container's width, against the left or right edge,
+  beside a pane at least twice as wide. If leaving the chrome out leaves
+  nothing, the chrome is read after all.
+
+Secure text fields are skipped before their text is ever read, whichever
+path is taken.
+
+### Adding an extraction profile
+
+Profiles are data: one `Profile` value in `PROFILES`, keyed by bundle id
+(and by app name for a snapshot without one).
+
+1. Dump the app's focused window while it shows the content you want. The
+   app does not need to be in front:
+
+   ```bash
+   scripts/ax-snapshot.sh com.example.app > /tmp/app.json
+   ```
+
+   The terminal needs the Accessibility grant. The dump holds whatever the
+   window shows, so keep it out of the repository.
+2. Find the content's container in the dump. The steadiest keys are a
+   `dom_id` (an HTML `id`, from web and Electron apps), an `identifier`
+   (AXIdentifier, from native apps), and roles and subroles such as
+   `AXTextArea` or `AXLandmarkMain`. Hashed CSS class names change with
+   every build of the app and are a poor key.
+3. Add the profile: `content` lists the regions in reading order, each
+   region a list of alternatives where the first one present on screen
+   wins; `skip` lists subtrees to leave out.
+4. Measure what it keeps against the same dump:
+
+   ```bash
+   cd src-tauri && AX_SNAPSHOT=/tmp/app.json AX_SHOW=1 \
+     cargo test --lib measure_snapshot -- --ignored --nocapture
+   ```
+
+5. Add a test with a small synthetic tree in `reader/extract.rs`, written
+   from the shape of the dump and never from its text.
+
 ## Tests
 
 ```bash
