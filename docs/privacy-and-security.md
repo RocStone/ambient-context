@@ -66,8 +66,10 @@ own data directory and your capture folder.
 ### Before text is read
 
 The Swift Accessibility walker skips `AXSecureTextField` roles and secure
-subroles, and does not traverse those subtrees. Strength depends on the
-target app marking sensitive controls correctly.
+subroles, and does not traverse those subtrees. Each element's role and
+subrole are read in a first round trip and its value and title in a
+second, so a secure field's value is never requested. Strength depends on
+the target app marking sensitive controls correctly.
 
 ### Before a snapshot is kept
 

@@ -35,12 +35,38 @@ public func ambientAxSecondsSinceInput() -> Double {
     return CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)
 }
 
-// Content in browsers and Electron apps nests 15 to 30 levels deep, so the
-// depth limit exists only to stop runaway recursion, not to bound work; the
-// visit cap is what bounds walk time.
-private let maxDepth = 40
-private let maxElements = 2000
+// The walk reads the window's tree as it is and leaves the choice of what
+// is content to the Rust side, where each app's extraction profile and the
+// generic fallback live and are tested. Nothing here bounds by depth:
+// Paseo's chat transcript sits 54 to 62 levels down, past the 40 that once
+// cut it off. Work is bounded by nodes visited, by text read and by wall
+// time instead. The text caps are three times what the Rust side keeps,
+// room for the chrome it leaves out. The depth guard only protects the
+// stack against a cyclic tree.
 private let maxVisited = 20000
+private let maxTextNodes = 6000
+private let maxTextChars = 300_000
+private let walkSeconds: TimeInterval = 1.5
+private let stackGuardDepth = 256
+// A value this long is a document or a terminal's scrollback, not a label.
+// Only the part on screen is kept, read through the visible range.
+private let maxValueChars = 8000
+
+// Read in one round trip per node. The text attributes are a second trip,
+// made only once the node is known not to be a secure field, so a password
+// is never read at all.
+private let structureAttributes = [
+    kAXRoleAttribute as String,
+    kAXSubroleAttribute as String,
+    kAXIdentifierAttribute as String,
+    "AXDOMIdentifier",
+    "AXDOMClassList",
+    kAXChildrenAttribute as String,
+    "AXURL",
+    kAXPositionAttribute as String,
+    kAXSizeAttribute as String,
+] as CFArray
+private let textAttributes = [kAXValueAttribute as String, kAXTitleAttribute as String] as CFArray
 
 private func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -50,54 +76,120 @@ private func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTyp
     return value
 }
 
-private func isSecure(_ element: AXUIElement) -> Bool {
-    if let role = copyAttribute(element, kAXRoleAttribute as String) as? String,
-       role == "AXSecureTextField" {
-        return true
+private func copyAttributes(_ element: AXUIElement, _ attributes: CFArray) -> [Any]? {
+    var values: CFArray?
+    guard AXUIElementCopyMultipleAttributeValues(
+        element, attributes, AXCopyMultipleAttributeOptions(rawValue: 0), &values) == .success
+    else {
+        return nil
     }
-    if let subrole = copyAttribute(element, kAXSubroleAttribute as String) as? String,
-       subrole == (kAXSecureTextFieldSubrole as String) {
-        return true
-    }
-    return false
+    return values as? [Any]
 }
 
-private func collectText(
-    from element: AXUIElement,
-    into texts: inout [String],
-    depth: Int,
-    visited: inout Int,
-    webUrl: inout String?
-) {
-    visited += 1
-    if depth > maxDepth || texts.count >= maxElements || visited > maxVisited { return }
+/// `[x, y, width, height]` from AXPosition and AXSize, which is how the
+/// Rust side tells a sidebar from a content pane.
+private func frame(_ position: Any, _ size: Any) -> [Double]? {
+    let position = position as CFTypeRef
+    let size = size as CFTypeRef
+    guard CFGetTypeID(position) == AXValueGetTypeID(),
+          CFGetTypeID(size) == AXValueGetTypeID() else {
+        return nil
+    }
+    var point = CGPoint.zero
+    var extent = CGSize.zero
+    guard AXValueGetValue(position as! AXValue, .cgPoint, &point),
+          AXValueGetValue(size as! AXValue, .cgSize, &extent) else {
+        return nil
+    }
+    return [point.x, point.y, extent.width, extent.height].map { Double($0) }
+}
+
+/// The on-screen part of a long text value, or nil when the element does
+/// not report one.
+private func visibleText(_ element: AXUIElement) -> String? {
+    guard let range = copyAttribute(element, kAXVisibleCharacterRangeAttribute as String) else {
+        return nil
+    }
+    var value: CFTypeRef?
+    guard AXUIElementCopyParameterizedAttributeValue(
+        element, kAXStringForRangeParameterizedAttribute as CFString, range, &value) == .success
+    else {
+        return nil
+    }
+    return value as? String
+}
+
+private struct Walk {
+    var nodes: [[String: Any]] = []
+    var visited = 0
+    var textNodes = 0
+    var textChars = 0
+    var webUrl: String? = nil
+    let deadline = Date().addingTimeInterval(walkSeconds)
+    var stopped = false
+}
+
+/// Appends the subtree at `element` to `walk.nodes` in document order. Each
+/// node carries its depth, which is all the Rust side needs to rebuild the
+/// tree from the flat list. A nested JSON tree would hit serde_json's
+/// recursion limit at the depths Electron apps reach.
+private func walkTree(_ element: AXUIElement, depth: Int, into walk: inout Walk) {
+    if walk.stopped { return }
+    walk.visited += 1
+    if walk.visited > maxVisited || walk.textNodes >= maxTextNodes
+        || walk.textChars >= maxTextChars || Date() > walk.deadline {
+        walk.stopped = true
+        return
+    }
+    if depth > stackGuardDepth { return }
+    guard let structure = copyAttributes(element, structureAttributes) else { return }
+
+    let role = structure[0] as? String
+    let subrole = structure[1] as? String
 
     // A secure field and everything inside it is skipped entirely. This is
     // the first of the redaction layers and the only one that can be done
     // before the text is ever read.
-    if isSecure(element) { return }
+    if role == "AXSecureTextField" || subrole == (kAXSecureTextFieldSubrole as String) {
+        return
+    }
+
+    var node: [String: Any] = ["d": depth]
+    if let role { node["role"] = role }
+    if let subrole { node["subrole"] = subrole }
+    if let identifier = structure[2] as? String, !identifier.isEmpty {
+        node["identifier"] = identifier
+    }
+    if let domId = structure[3] as? String, !domId.isEmpty { node["dom_id"] = domId }
+    if let classes = structure[4] as? [String], !classes.isEmpty { node["classes"] = classes }
+    if let frame = frame(structure[7], structure[8]) { node["frame"] = frame }
 
     // The page URL lives on the web area, not the window. First one wins:
     // the focused window's main web area is reached before any embedded one.
-    if webUrl == nil,
-       let role = copyAttribute(element, kAXRoleAttribute as String) as? String,
-       role == "AXWebArea",
-       let url = copyAttribute(element, "AXURL") {
-        webUrl = (url as? NSURL)?.absoluteString
+    if walk.webUrl == nil, role == "AXWebArea", let url = structure[6] as? NSURL {
+        walk.webUrl = url.absoluteString
     }
 
-    for attribute in [kAXValueAttribute as String, kAXTitleAttribute as String] {
-        if let value = copyAttribute(element, attribute) as? String {
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty && trimmed.count < 8000 {
-                texts.append(trimmed)
+    if let text = copyAttributes(element, textAttributes) {
+        if var value = text[0] as? String {
+            if value.count >= maxValueChars { value = visibleText(element) ?? "" }
+            if value.count < maxValueChars, !value.isEmpty {
+                node["value"] = value
+                walk.textChars += value.count
             }
         }
+        if let title = text[1] as? String, !title.isEmpty, title.count < maxValueChars {
+            node["title"] = title
+            walk.textChars += title.count
+        }
     }
+    if node["value"] != nil || node["title"] != nil { walk.textNodes += 1 }
+    walk.nodes.append(node)
 
-    if let children = copyAttribute(element, kAXChildrenAttribute as String) as? [AXUIElement] {
+    if let children = structure[5] as? [AXUIElement] {
         for child in children {
-            collectText(from: child, into: &texts, depth: depth + 1, visited: &visited, webUrl: &webUrl)
+            walkTree(child, depth: depth + 1, into: &walk)
+            if walk.stopped { return }
         }
     }
 }
@@ -129,9 +221,10 @@ private func enableAccessibilityOnce(_ pid: pid_t, _ appElement: AXUIElement, _ 
     }
 }
 
-/// Reads the focused window of the frontmost application and returns JSON.
-/// Only the focused window is touched: background windows, minimised windows
-/// and unfocused displays are never walked.
+/// Reads the focused window of the frontmost application and returns its
+/// accessibility tree as JSON. Only the focused window is touched:
+/// background windows, minimised windows and unfocused displays are never
+/// walked.
 @_cdecl("ambient_ax_snapshot")
 public func ambientAxSnapshot() -> SRString {
     guard AXIsProcessTrusted() else {
@@ -162,6 +255,13 @@ public func ambientAxSnapshot() -> SRString {
         return SRString("ERROR: own window in front")
     }
 
+    return SRString(snapshotJSON(of: frontmost))
+}
+
+/// The snapshot of one application's focused window, or an `ERROR: `
+/// string. Separate from the frontmost lookup so `scripts/ax-snapshot.sh`
+/// can measure a named app without bringing it to the front.
+func snapshotJSON(of frontmost: NSRunningApplication) -> String {
     let appName = frontmost.localizedName ?? "Unknown"
     let appElement = AXUIElementCreateApplication(frontmost.processIdentifier)
 
@@ -176,7 +276,7 @@ public func ambientAxSnapshot() -> SRString {
     enableAccessibilityOnce(frontmost.processIdentifier, appElement, appName)
 
     guard let focused = copyAttribute(appElement, kAXFocusedWindowAttribute as String) else {
-        return SRString("ERROR: no focused window")
+        return "ERROR: no focused window"
     }
     let window = focused as! AXUIElement
 
@@ -190,24 +290,25 @@ public func ambientAxSnapshot() -> SRString {
         document = (docUrl as? NSURL)?.absoluteString
     }
 
-    var texts: [String] = []
-    var visited = 0
-    var webUrl: String? = nil
-    collectText(from: window, into: &texts, depth: 0, visited: &visited, webUrl: &webUrl)
+    var walk = Walk()
+    walkTree(window, depth: 0, into: &walk)
 
     let payload: [String: Any] = [
         "app": appName,
+        "bundle_id": frontmost.bundleIdentifier as Any,
         "window_title": title as Any,
         "document": document as Any,
-        "url": webUrl as Any,
-        "text": texts
+        "url": walk.webUrl as Any,
+        "nodes": walk.nodes,
+        "visited": walk.visited,
+        "truncated": walk.stopped,
     ]
 
     guard let data = try? JSONSerialization.data(withJSONObject: payload),
           let json = String(data: data, encoding: .utf8) else {
-        return SRString("ERROR: could not serialise snapshot")
+        return "ERROR: could not serialise snapshot"
     }
-    return SRString(json)
+    return json
 }
 
 // MARK: - Window chrome

@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.1.4-roc.1
+
+Fork build on 1.1.4. Reads the content of a window rather than the first
+40 levels of it.
+
+### Capture
+
+- **Paseo chat is recorded.** The walk stopped at 40 levels of nesting,
+  and Paseo's transcript sits 54 to 62 levels down, so only its project
+  sidebar was ever read; once the day's dedup had seen the sidebar, most
+  Paseo blocks were empty. The walk is now bounded by nodes, text and time
+  instead of depth.
+- **Per-app extraction profiles.** An app's profile names where its
+  content lives and what to leave out. Paseo reads the transcript and the
+  composer; browsers read the page's main landmark or the page, never
+  the tab strip or toolbar. Adding one is described in the README.
+- **Window chrome is left out for every other app.** Menus, toolbars, tab
+  buttons, web navigation landmarks and sidebars (by their shape: a
+  narrow full-height column at an edge) are skipped unless they are all
+  there is.
+- **Long text areas keep their visible part.** A value of 8,000
+  characters or more, such as a terminal's scrollback, was dropped whole;
+  the part on screen is now read instead.
+
+### Updates
+
+- **No background update check.** This version sorts below the official
+  1.1.4, so the official release would be offered over it. Check for
+  Updates in the menu bar still works on request.
+
 ## 1.1.4
 
 Keeps Chinese and Japanese text, never reads Apple Passwords, stops
