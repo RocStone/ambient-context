@@ -194,7 +194,7 @@ pub fn notice_body(version: &str) -> String {
     format!("Version {version} is available. Update from the menu bar.")
 }
 
-/// Off in the fork build. Its version, 1.1.4-roc.1, sorts below the
+/// Off in the fork build. Its versions, 1.1.4-roc.N, sort below the
 /// official 1.1.4, so a background check would offer the official release
 /// over it. "Check for Updates" in the tray still checks on request.
 const BACKGROUND_CHECKS: bool = false;

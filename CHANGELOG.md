@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.4-roc.2
+
+Fork build on 1.1.4-roc.1. Fixes a crash that stopped the app staying up.
+
+### Capture
+
+- **Odd window geometry no longer crashes the app.** An element whose
+  position or size came back as NaN or infinity put that number in the
+  snapshot, and JSON serialisation raised an Objective-C exception that
+  aborted the app on its first capture. Such frames are now dropped, and a
+  snapshot that still holds a value JSON cannot represent is logged and
+  skipped instead of written.
+- **A container with no height has no sidebar.** Every column in it
+  passed the full-height test, so one could be dropped as a sidebar.
+
 ## 1.1.4-roc.1
 
 Fork build on 1.1.4. Reads the content of a window rather than the first
