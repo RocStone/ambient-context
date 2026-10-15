@@ -300,7 +300,9 @@ fn children(nodes: &[Node], index: usize) -> Vec<usize> {
 /// sibling at least twice as wide. Finder's and Mail's source lists,
 /// Paseo's project list and a web app's navigation column all look like
 /// this; content panes do not. A container under 500 points wide is a
-/// narrow window, where the shape says nothing.
+/// narrow window, where the shape says nothing. Nor does a container with
+/// no height, which an app can report for an element: every
+/// column would pass as full height.
 fn is_sidebar(nodes: &[Node], index: usize, parent: usize) -> bool {
     let (Some(own), Some(outer)) = (nodes[index].frame, nodes[parent].frame) else {
         return false;
@@ -309,6 +311,7 @@ fn is_sidebar(nodes: &[Node], index: usize, parent: usize) -> bool {
     let [outer_x, _, outer_width, outer_height] = outer;
     let edge = 2.0;
     let shaped = outer_width >= 500.0
+        && outer_height > 0.0
         && width > 0.0
         && width <= outer_width / 3.0
         && height >= outer_height * 0.9
@@ -643,6 +646,32 @@ mod tests {
         ]);
         let got = extract("Narrow", None, &nodes);
         assert_eq!(got.lines, vec!["Left column", "Right column"]);
+    }
+
+    #[test]
+    fn a_container_with_no_height_has_no_sidebar() {
+        let nodes = tree(&[
+            (0, "AXWindow", "frame=0,0,1000,0"),
+            (1, "AXGroup", "frame=0,0,200,0"),
+            (2, "AXStaticText", "value=Left column"),
+            (1, "AXGroup", "frame=200,0,800,0"),
+            (2, "AXStaticText", "value=Right column"),
+        ]);
+        let got = extract("Unlaid", None, &nodes);
+        assert_eq!(got.lines, vec!["Left column", "Right column"]);
+    }
+
+    #[test]
+    fn zero_size_frames_are_read_without_trouble() {
+        let nodes = tree(&[
+            (0, "AXWindow", "frame=0,0,0,0"),
+            (1, "AXGroup", "frame=0,0,0,0"),
+            (2, "AXStaticText", "value=Inside nothing"),
+            (1, "AXGroup", "frame=0,0,0,0"),
+            (2, "AXStaticText", "value=Also inside nothing"),
+        ]);
+        let got = extract("Zero", None, &nodes);
+        assert_eq!(got.lines, vec!["Inside nothing", "Also inside nothing"]);
     }
 
     #[test]

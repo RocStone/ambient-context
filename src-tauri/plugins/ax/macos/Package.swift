@@ -17,6 +17,11 @@ let package = Package(
                 .product(name: "SwiftRs", package: "swift-rs")
             ],
             path: "Sources"
-        )
+        ),
+        .testTarget(
+            name: "AxPluginTests",
+            dependencies: ["AxPlugin"],
+            path: "Tests/AxPluginTests"
+        ),
     ]
 )

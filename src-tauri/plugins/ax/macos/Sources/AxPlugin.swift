@@ -101,7 +101,17 @@ private func frame(_ position: Any, _ size: Any) -> [Double]? {
           AXValueGetValue(size as! AXValue, .cgSize, &extent) else {
         return nil
     }
-    return [point.x, point.y, extent.width, extent.height].map { Double($0) }
+    return finiteFrame(point, extent)
+}
+
+/// The frame as plain numbers, or nil when any of them is NaN or infinite.
+/// An app can report such a position or size for an element, and
+/// JSONSerialization raises an Objective-C exception on a non-finite number,
+/// which `try?` cannot catch: it aborted the whole app. A node without a
+/// frame is only ever left out of the sidebar test.
+func finiteFrame(_ point: CGPoint, _ extent: CGSize) -> [Double]? {
+    let values = [point.x, point.y, extent.width, extent.height].map { Double($0) }
+    return values.allSatisfy(\.isFinite) ? values : nil
 }
 
 /// The on-screen part of a long text value, or nil when the element does
@@ -304,6 +314,19 @@ func snapshotJSON(of frontmost: NSRunningApplication) -> String {
         "truncated": walk.stopped,
     ]
 
+    return serialiseSnapshot(payload)
+}
+
+/// The payload as JSON, or an `ERROR: ` string the capture loop skips.
+/// JSONSerialization reports a bad value by raising an Objective-C
+/// exception rather than throwing, so `try?` alone does not protect the
+/// app: the payload is checked first. `finiteFrame` keeps the known source
+/// of non-finite numbers out; this catches any that slip in later.
+func serialiseSnapshot(_ payload: [String: Any]) -> String {
+    guard JSONSerialization.isValidJSONObject(payload) else {
+        FileHandle.standardError.write(Data("[ax] skipped a snapshot holding a non-JSON value\n".utf8))
+        return "ERROR: snapshot holds a non-JSON value"
+    }
     guard let data = try? JSONSerialization.data(withJSONObject: payload),
           let json = String(data: data, encoding: .utf8) else {
         return "ERROR: could not serialise snapshot"
