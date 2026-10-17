@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.4-roc.3
+
+Fork build on 1.1.4-roc.2. Fixes memory that grew with every capture.
+
+### Capture
+
+- **Memory stays flat while recording.** Each snapshot of the focused
+  window was kept for as long as the app ran, a few hundred KB a capture,
+  and a copy left running for two days reached 4 GB. Swift hands each
+  snapshot back autoreleased, and the capture thread, a plain Rust thread,
+  had no autorelease pool to release it into. Every call into the
+  accessibility plugin now runs inside its own pool, and the walk drains
+  its working objects before returning. A measurement, run by hand with
+  the Accessibility grant, checks the footprint after many snapshots:
+  `cargo test --lib snapshots_leave_memory_flat -- --ignored --nocapture`.
+
 ## 1.1.4-roc.2
 
 Fork build on 1.1.4-roc.1. Fixes a crash that stopped the app staying up.

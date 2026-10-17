@@ -34,7 +34,7 @@ dependencies = [
 
 [[package]]
 name = "ambient-context"
-version = "1.1.4-roc.2"
+version = "1.1.4-roc.3"
 dependencies = [
  "chrono",
  "plist",

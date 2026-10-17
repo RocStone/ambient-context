@@ -235,10 +235,19 @@ private func enableAccessibilityOnce(_ pid: pid_t, _ appElement: AXUIElement, _ 
 /// accessibility tree as JSON. Only the focused window is touched:
 /// background windows, minimised windows and unfocused displays are never
 /// walked.
+///
+/// The walk runs in its own autorelease pool, so the AX values and the
+/// serialised Data it leaves behind are freed before the copy for Rust is
+/// made. The returned `SRString` is itself autoreleased on the way out, into
+/// a pool only the Rust caller can provide: see `reader/macos.rs`.
 @_cdecl("ambient_ax_snapshot")
 public func ambientAxSnapshot() -> SRString {
+    return SRString(autoreleasepool { snapshotOfFrontmost() })
+}
+
+private func snapshotOfFrontmost() -> String {
     guard AXIsProcessTrusted() else {
-        return SRString("ERROR: permission not granted")
+        return "ERROR: permission not granted"
     }
 
     // A locked screen is not work. Skipping here also lets the capture loop
@@ -246,11 +255,11 @@ public func ambientAxSnapshot() -> SRString {
     // rather than spanning lunch.
     if let session = CGSessionCopyCurrentDictionary() as? [String: Any],
        session["CGSSessionScreenIsLocked"] as? Bool == true {
-        return SRString("ERROR: screen locked")
+        return "ERROR: screen locked"
     }
 
     guard let frontmost = NSWorkspace.shared.frontmostApplication else {
-        return SRString("ERROR: no frontmost application")
+        return "ERROR: no frontmost application"
     }
 
     // This app's own window is never read. An accessibility query on the
@@ -262,10 +271,10 @@ public func ambientAxSnapshot() -> SRString {
     // side already treats a look at the app itself as not work, so an error
     // here costs nothing that was wanted.
     if frontmost.processIdentifier == ProcessInfo.processInfo.processIdentifier {
-        return SRString("ERROR: own window in front")
+        return "ERROR: own window in front"
     }
 
-    return SRString(snapshotJSON(of: frontmost))
+    return snapshotJSON(of: frontmost)
 }
 
 /// The snapshot of one application's focused window, or an `ERROR: `
